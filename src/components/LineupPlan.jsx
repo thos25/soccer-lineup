@@ -1,6 +1,12 @@
 import LineupWindow from './LineupWindow.jsx'
 
-export default function LineupPlan({ plan, players, onSwap }) {
+function windowLabel(windowIndex) {
+  const quarter = Math.floor(windowIndex / 2) + 1
+  const half = windowIndex % 2 === 0 ? 'Start' : 'Mid'
+  return `Q${quarter} ${half}`
+}
+
+export default function LineupPlan({ plan, players, onSwap, separationViolations = [] }) {
   if (!plan) {
     return (
       <div className="p-4 text-center">
@@ -28,6 +34,14 @@ export default function LineupPlan({ plan, players, onSwap }) {
         </button>
       </div>
 
+      {separationViolations.length > 0 && (
+        <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 no-print">
+          ⚠ Couldn&apos;t fully honor &ldquo;keep apart&rdquo; for:{' '}
+          <strong>{separationViolations.map(windowLabel).join(', ')}</strong>
+          {' '}— too many flagged players for available pairs.
+        </div>
+      )}
+
       <div className="lineup-print-grid">
         {[1, 2, 3, 4].map((q) => (
           <div key={q} className="quarter-block mb-5">
@@ -40,6 +54,7 @@ export default function LineupPlan({ plan, players, onSwap }) {
                 <LineupWindow
                   key={w.windowIndex}
                   window={w}
+                  players={players}
                   getName={getName}
                   onSwap={onSwap}
                 />

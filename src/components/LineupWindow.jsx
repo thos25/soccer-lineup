@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import SwapPicker from './SwapPicker.jsx'
 
-export default function LineupWindow({ window: win, getName, onSwap }) {
-  const [swapTarget, setSwapTarget] = useState(null) // { id, position }
+export default function LineupWindow({ window: win, players = [], getName, onSwap }) {
+  const [swapTarget, setSwapTarget] = useState(null)
 
+  const playerMap = Object.fromEntries(players.map((p) => [p.id, p]))
   const isQuarterStart = win.windowIndex % 2 === 0
 
   const handleChipClick = (id, position) => {
-    // GK at mid-quarter window is locked
     if (position === 'goalkeeper' && !isQuarterStart) return
     setSwapTarget({ id, position })
   }
@@ -18,9 +18,6 @@ export default function LineupWindow({ window: win, getName, onSwap }) {
     setSwapTarget(null)
   }
 
-  // Build the list of all swappable players for the picker.
-  // At mid-quarter windows, GK is excluded so users cannot accidentally break
-  // the quarter-lock invariant by swapping another player into GK.
   const swappablePlayers = [
     ...(isQuarterStart ? [{ id: win.goalkeeper, position: 'goalkeeper' }] : []),
     ...win.defenders.map((id) => ({ id, position: 'defenders' })),
@@ -41,6 +38,7 @@ export default function LineupWindow({ window: win, getName, onSwap }) {
 
   const renderChip = (id, position) => {
     const locked = position === 'goalkeeper' && !isQuarterStart
+    const isSeparate = playerMap[id]?.separate === true
     return (
       <button
         key={id}
@@ -55,6 +53,9 @@ export default function LineupWindow({ window: win, getName, onSwap }) {
       >
         {getName(id)}
         {locked && <span aria-hidden="true">&#x1F512;</span>}
+        {isSeparate && (
+          <span className="text-orange-400" title="Keep-apart flagged" aria-hidden="true">⚡</span>
+        )}
       </button>
     )
   }

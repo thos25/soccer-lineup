@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useRoster } from './store/useRoster.js'
 import { useGame } from './store/useGame.js'
+import { useTeam } from './store/useTeam.js'
+import { isFirebaseConfigured } from './lib/firebase.js'
 import RosterManager from './components/RosterManager.jsx'
 import GameSetup from './components/GameSetup.jsx'
 import LineupPlan from './components/LineupPlan.jsx'
@@ -10,10 +12,16 @@ const TAB_LABELS = { roster: 'Roster', game: 'Game', lineup: 'Lineup' }
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('roster')
-  const { players, addPlayer, removePlayer, renamePlayer, storageAvailable } =
-    useRoster()
-  const { presentIds, togglePresent, plan, generatePlan, swapPlayers, clearPlan } =
-    useGame(players)
+  const {
+    players, addPlayer, removePlayer, renamePlayer,
+    toggleSeparate, setPlayers, storageAvailable,
+  } = useRoster()
+  const {
+    presentIds, togglePresent, plan, separationViolations,
+    generatePlan, swapPlayers, clearPlan,
+  } = useGame(players)
+  const { teamName, connected, syncing, offline, connect, disconnect } =
+    useTeam(players, setPlayers)
 
   const handleGenerate = () => {
     generatePlan()
@@ -35,6 +43,14 @@ export default function App() {
             onAdd={addPlayer}
             onRemove={removePlayer}
             onRename={renamePlayer}
+            onToggleSeparate={toggleSeparate}
+            teamName={teamName}
+            connected={connected}
+            syncing={syncing}
+            offline={offline}
+            onConnect={connect}
+            onDisconnect={disconnect}
+            firebaseConfigured={isFirebaseConfigured()}
           />
         )}
         {activeTab === 'game' && (
@@ -48,7 +64,12 @@ export default function App() {
           />
         )}
         {activeTab === 'lineup' && (
-          <LineupPlan plan={plan} players={players} onSwap={swapPlayers} />
+          <LineupPlan
+            plan={plan}
+            players={players}
+            onSwap={swapPlayers}
+            separationViolations={separationViolations}
+          />
         )}
       </main>
 

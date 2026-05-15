@@ -1,7 +1,8 @@
+import { useMemo } from 'react'
 import { useLocalStorage } from './useLocalStorage.js'
 
 const ROSTER_KEY = 'soccer-roster'
-const DEFAULT_ROSTER = { version: 1, players: [] }
+const DEFAULT_ROSTER = { version: 2, players: [] }
 
 function generateId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -22,22 +23,24 @@ function isValidPlayer(p) {
 function migrate(stored) {
   if (!stored || typeof stored !== 'object') return DEFAULT_ROSTER
   const raw = Array.isArray(stored.players) ? stored.players.filter(isValidPlayer) : []
-  // De-duplicate IDs defensively
   const seen = new Set()
-  const players = raw.filter((p) => !seen.has(p.id) && seen.add(p.id))
-  return { version: 1, players }
+  const players = raw
+    .filter((p) => !seen.has(p.id) && seen.add(p.id))
+    .map((p) => ({ id: p.id, name: p.name, separate: p.separate === true }))
+  return { version: 2, players }
 }
 
 export function useRoster() {
   const [raw, setRaw, storageAvailable] = useLocalStorage(ROSTER_KEY, DEFAULT_ROSTER)
-  const { players } = migrate(raw)
 
-  const save = (newPlayers) => setRaw({ version: 1, players: newPlayers })
+  const players = useMemo(() => migrate(raw).players, [raw])
+
+  const save = (newPlayers) => setRaw({ version: 2, players: newPlayers })
 
   const addPlayer = (name) => {
     const trimmed = name.trim()
     if (!trimmed) return
-    save([...players, { id: generateId(), name: trimmed }])
+    save([...players, { id: generateId(), name: trimmed, separate: false }])
   }
 
   const removePlayer = (id) => save(players.filter((p) => p.id !== id))
@@ -48,5 +51,17 @@ export function useRoster() {
     save(players.map((p) => (p.id === id ? { ...p, name: trimmed } : p)))
   }
 
-  return { players, addPlayer, removePlayer, renamePlayer, storageAvailable }
+  const toggleSeparate = (id) =>
+    save(players.map((p) => (p.id === id ? { ...p, separate: !p.separate } : p)))
+
+  const setPlayers = (incoming) => {
+    const valid = Array.isArray(incoming)
+      ? incoming
+          .filter(isValidPlayer)
+          .map((p) => ({ id: p.id, name: p.name, separate: p.separate === true }))
+      : []
+    save(valid)
+  }
+
+  return { players, addPlayer, removePlayer, renamePlayer, toggleSeparate, setPlayers, storageAvailable }
 }

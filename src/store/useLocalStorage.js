@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useLayoutEffect } from 'react'
 
 function isAvailable() {
   try {
@@ -28,18 +28,20 @@ export function useLocalStorage(key, defaultValue) {
     }
   })
 
+  // Sync to localStorage after every committed state change.
+  // useLayoutEffect runs synchronously after DOM updates (before paint),
+  // so a refresh immediately after an edit still persists.
+  useLayoutEffect(() => {
+    if (!available) return
+    try {
+      localStorage.setItem(key, JSON.stringify(value))
+    } catch {
+      // QuotaExceededError — in-memory state is still correct
+    }
+  }, [key, value, available])
+
   const setStoredValue = (newValue) => {
-    setValue((prev) => {
-      const next = typeof newValue === 'function' ? newValue(prev) : newValue
-      if (available) {
-        try {
-          localStorage.setItem(key, JSON.stringify(next))
-        } catch {
-          // QuotaExceededError — already updating in-memory state above
-        }
-      }
-      return next
-    })
+    setValue((prev) => (typeof newValue === 'function' ? newValue(prev) : newValue))
   }
 
   return [value, setStoredValue, available]

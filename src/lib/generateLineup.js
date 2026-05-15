@@ -6,10 +6,12 @@
  *  - All 4 quarter goalies are distinct when N >= 8
  *  - No player benched in consecutive windows (force-promotion)
  *  - Roughly equal windowsPlayed across all present players
+ *  - Separation constraint: players with separate===true avoid sharing DEF/MID/FWD pairs
  *
- * @param {Array<{id: string, name: string}>} presentPlayers - Players present for this game (length >= 7)
+ * @param {Array<{id: string, name: string, separate?: boolean}>} presentPlayers
  * @param {() => number} rng - Random number source (default Math.random; pass seeded fn for tests)
- * @returns {LineupPlan}
+ * @returns {{ plan: LineupPlan, separationViolations: number[] }}
+ *   separationViolations: windowIndexes where the separation constraint could not be satisfied
  */
 export function generateLineup(presentPlayers, rng = Math.random) {
   const N = presentPlayers.length
@@ -24,26 +26,21 @@ export function generateLineup(presentPlayers, rng = Math.random) {
     return a
   }
 
-  // Per-player state
   const windowsPlayed = {}
   presentPlayers.forEach((p) => { windowsPlayed[p.id] = 0 })
 
-  // Goalie rotation: assigned dynamically at each quarter start.
-  // The lowest-played not-yet-GK player becomes GK, ensuring GK duties go to
-  // players who are behind in play time rather than randomly ahead.
   const goaliesByQuarter = {}
   const usedAsGk = new Set()
 
   const windows = []
-  let previouslyBenched = [] // player IDs benched at window w-1
+  const separationViolations = []
+  let previouslyBenched = []
 
   for (let w = 0; w < 8; w++) {
-    const quarterIdx = Math.floor(w / 2) // 0-indexed quarter (0–3)
-    const quarter = quarterIdx + 1        // 1-indexed for display
+    const quarterIdx = Math.floor(w / 2)
+    const quarter = quarterIdx + 1
     const half = w % 2 === 0 ? 'start' : 'mid'
 
-    // At quarter start, select GK: shuffle candidates first for random tiebreaking,
-    // then stable-sort by windowsPlayed ASC to pick the most-behind player.
     if (w % 2 === 0) {
       const candidates = shuffle(presentPlayers.filter((p) => !usedAsGk.has(p.id)))
       candidates.sort((a, b) => windowsPlayed[a.id] - windowsPlayed[b.id])
@@ -52,15 +49,12 @@ export function generateLineup(presentPlayers, rng = Math.random) {
     }
 
     const goalie = goaliesByQuarter[quarterIdx]
-
     const nonGoalie = presentPlayers.filter((p) => p.id !== goalie)
 
-    // Consecutive-bench constraint: players benched last window must play this window
-    // (unless they are this quarter's goalie, in which case they play as GK instead)
     const forcedPlayIds = previouslyBenched.filter((id) => id !== goalie)
     const remaining = nonGoalie
       .filter((p) => !forcedPlayIds.includes(p.id))
-      .sort((a, b) => windowsPlayed[a.id] - windowsPlayed[b.id]) // stable sort (ES2019+)
+      .sort((a, b) => windowsPlayed[a.id] - windowsPlayed[b.id])
 
     const combined = [
       ...forcedPlayIds.map((id) => presentPlayers.find((p) => p.id === id)),
@@ -70,14 +64,33 @@ export function generateLineup(presentPlayers, rng = Math.random) {
     const outfieldPlayers = combined.slice(0, 6)
     const benchPlayers = combined.slice(6)
 
-    // Shuffle outfield for position assignment
     const shuffledOutfield = shuffle(outfieldPlayers)
-    const defenders = [shuffledOutfield[0].id, shuffledOutfield[1].id]
-    const midfielders = [shuffledOutfield[2].id, shuffledOutfield[3].id]
-    const forwards = [shuffledOutfield[4].id, shuffledOutfield[5].id]
-    const bench = benchPlayers.map((p) => p.id)
 
-    // Increment play counts
+    // Separation-aware position assignment.
+    // Proof of correctness for k ≤ 3: 3 pairs exist; placing one flagged player at each
+    // pair-first-slot (indices 0,2,4) guarantees no pair contains two flagged players.
+    const flagged   = shuffledOutfield.filter((p) => p.separate === true)
+    const unflagged = shuffledOutfield.filter((p) => p.separate !== true)
+
+    let arranged
+    if (flagged.length <= 3) {
+      const slots = new Array(6).fill(null)
+      flagged.forEach((p, i) => { slots[i * 2] = p })
+      unflagged.forEach((p) => {
+        const idx = slots.findIndex((s) => s === null)
+        if (idx !== -1) slots[idx] = p
+      })
+      arranged = slots
+    } else {
+      separationViolations.push(w)
+      arranged = shuffledOutfield
+    }
+
+    const defenders   = [arranged[0].id, arranged[1].id]
+    const midfielders = [arranged[2].id, arranged[3].id]
+    const forwards    = [arranged[4].id, arranged[5].id]
+    const bench       = benchPlayers.map((p) => p.id)
+
     windowsPlayed[goalie]++
     outfieldPlayers.forEach((p) => { windowsPlayed[p.id]++ })
 
@@ -96,11 +109,14 @@ export function generateLineup(presentPlayers, rng = Math.random) {
   }
 
   return {
-    id: typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : String(Date.now()),
-    generatedAt: new Date().toISOString(),
-    presentPlayerIds: presentPlayers.map((p) => p.id),
-    windows,
+    plan: {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : String(Date.now()),
+      generatedAt: new Date().toISOString(),
+      presentPlayerIds: presentPlayers.map((p) => p.id),
+      windows,
+    },
+    separationViolations,
   }
 }

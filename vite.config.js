@@ -8,6 +8,15 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['soccer.svg', 'apple-touch-icon-180x180.png', 'favicon.ico'],
+      workbox: {
+        navigateFallbackDenylist: [/firebase/],
+        runtimeCaching: [
+          {
+            urlPattern: /firebaseio\.com|firebasedatabase\.app|googleapis\.com/,
+            handler: 'NetworkOnly',
+          },
+        ],
+      },
       manifest: {
         name: 'Soccer Lineup',
         short_name: 'Lineup',

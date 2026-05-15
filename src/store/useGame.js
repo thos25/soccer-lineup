@@ -35,7 +35,6 @@ function swapInWindow(w, idA, idB) {
     else if (pos === 'bench') win.bench = replaceOne(win.bench, from, to)
   }
 
-  // Place B where A was, and A where B was
   setPos(posA, idA, idB)
   setPos(posB, idB, idA)
 
@@ -45,6 +44,7 @@ function swapInWindow(w, idA, idB) {
 export function useGame(players) {
   const [presentIds, setPresentIds] = useState(new Set())
   const [plan, setPlan] = useState(null)
+  const [separationViolations, setSeparationViolations] = useState([])
 
   // Reconcile: drop IDs that no longer exist in the roster
   const validPresentIds = useMemo(() => {
@@ -64,10 +64,15 @@ export function useGame(players) {
   const generatePlan = () => {
     const presentPlayers = players.filter((p) => validPresentIds.has(p.id))
     if (presentPlayers.length < 7) return
-    setPlan(generateLineup(presentPlayers))
+    const { plan, separationViolations } = generateLineup(presentPlayers)
+    setPlan(plan)
+    setSeparationViolations(separationViolations)
   }
 
-  const clearPlan = () => setPlan(null)
+  const clearPlan = () => {
+    setPlan(null)
+    setSeparationViolations([])
+  }
 
   /**
    * Swap two players in a specific window.
@@ -78,7 +83,6 @@ export function useGame(players) {
     setPlan((prev) => {
       if (!prev) return prev
 
-      // Check original window to identify GK involvement before mutation
       const origWin = prev.windows[windowIndex]
       const posA = findPosition(origWin, playerIdA)
       const posB = findPosition(origWin, playerIdB)
@@ -88,7 +92,6 @@ export function useGame(players) {
       const windows = prev.windows.map((w) => ({ ...w }))
       windows[windowIndex] = swapInWindow(windows[windowIndex], playerIdA, playerIdB)
 
-      // Propagate GK change to the mid-quarter window of this quarter
       if (gkSwapAtQuarterStart) {
         windows[windowIndex + 1] = swapInWindow(
           windows[windowIndex + 1],
@@ -101,5 +104,13 @@ export function useGame(players) {
     })
   }
 
-  return { presentIds: validPresentIds, togglePresent, plan, generatePlan, swapPlayers, clearPlan }
+  return {
+    presentIds: validPresentIds,
+    togglePresent,
+    plan,
+    separationViolations,
+    generatePlan,
+    swapPlayers,
+    clearPlan,
+  }
 }
