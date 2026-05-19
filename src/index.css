@@ -28,6 +28,13 @@
     margin-bottom: 0.4cm;
   }
 
+  /* Re-show player chips (rendered as buttons) inside the lineup grid */
+  .lineup-print-grid button {
+    display: inline-flex !important;
+    cursor: default !important;
+    pointer-events: none !important;
+  }
+
   @page {
     size: A4 portrait;
     margin: 1.5cm 1cm;
