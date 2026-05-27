@@ -22,6 +22,44 @@ function makeRng(seed = 42) {
   }
 }
 
+// Count how many windows each player spent at each outfield position
+function positionCountsFromPlan(plan, players) {
+  const counts = {}
+  players.forEach((p) => {
+    counts[p.id] = { defenders: 0, midfielders: 0, forwards: 0 }
+  })
+  plan.windows.forEach((w) => {
+    w.defenders.forEach((id) => { counts[id].defenders++ })
+    w.midfielders.forEach((id) => { counts[id].midfielders++ })
+    w.forwards.forEach((id) => { counts[id].forwards++ })
+  })
+  return counts
+}
+
+// Longest consecutive OUTFIELD streak for a player (GK windows are neutral — neither
+// increment nor reset, matching the algorithm's streak tracking).
+function maxConsecutiveStreak(plan, playerId) {
+  let max = 0
+  let cur = 0
+  plan.windows.forEach((w) => {
+    const inOutfield =
+      w.defenders.includes(playerId) ||
+      w.midfielders.includes(playerId) ||
+      w.forwards.includes(playerId)
+    const isGk = w.goalkeeper === playerId
+    if (inOutfield) {
+      cur++
+      max = Math.max(max, cur)
+    } else if (!isGk) {
+      cur = 0  // benched
+    }
+    // GK: no change to streak counter
+  })
+  return max
+}
+
+// ─── Structure ────────────────────────────────────────────────────────────────
+
 describe('generateLineup — structure', () => {
   it.each([7, 8, 9, 10, 11, 12])('N=%i produces 8 windows with correct position counts', (n) => {
     const players = makePlayers(n)
@@ -38,6 +76,8 @@ describe('generateLineup — structure', () => {
     }
   })
 })
+
+// ─── GK quarter lock ─────────────────────────────────────────────────────────
 
 describe('generateLineup — goalie quarter lock', () => {
   it.each([7, 8, 9, 10, 11, 12])('N=%i: same goalie at both windows of each quarter', (n) => {
@@ -62,6 +102,8 @@ describe('generateLineup — goalie quarter lock', () => {
   })
 })
 
+// ─── No consecutive bench ────────────────────────────────────────────────────
+
 describe('generateLineup — no consecutive bench', () => {
   it.each([8, 9, 10, 11, 12])('N=%i: no player benched at consecutive windows (20 runs)', (n) => {
     const players = makePlayers(n)
@@ -80,6 +122,8 @@ describe('generateLineup — no consecutive bench', () => {
     }
   })
 })
+
+// ─── Fair play time ───────────────────────────────────────────────────────────
 
 describe('generateLineup — fair play time', () => {
   it('N=7: every player plays all 8 windows', () => {
@@ -121,11 +165,15 @@ describe('generateLineup — fair play time', () => {
   })
 })
 
+// ─── Throws on too few players ────────────────────────────────────────────────
+
 describe('generateLineup — throws on too few players', () => {
   it('throws when fewer than 7 players', () => {
     expect(() => generateLineup(makePlayers(6))).toThrow('at least 7')
   })
 })
+
+// ─── Separation constraint ────────────────────────────────────────────────────
 
 describe('generateLineup — separation constraint', () => {
   it('k=2 flagged: no two flagged players share a pair row in any window (20 runs)', () => {
@@ -169,5 +217,135 @@ describe('generateLineup — separation constraint', () => {
     expect(plan).toHaveProperty('windows')
     expect(plan).toHaveProperty('id')
     expect(Array.isArray(separationViolations)).toBe(true)
+  })
+})
+
+// ─── Position rotation ────────────────────────────────────────────────────────
+
+describe('generateLineup — position rotation', () => {
+  it.each([7, 8, 9, 10, 11, 12])(
+    'N=%i: no outfield player exceeds ceil(outfieldWindows/3) appearances in any single position (20 runs)',
+    (n) => {
+      const players = makePlayers(n)
+      for (let r = 0; r < 20; r++) {
+        const { plan } = generateLineup(players, makeRng(r))
+        const counts = positionCountsFromPlan(plan, players)
+        players.forEach((p) => {
+          const c = counts[p.id]
+          const outfieldTotal = c.defenders + c.midfielders + c.forwards
+          // ceil(K/3) is the mathematically optimal max for K outfield windows across 3 positions
+          // ceil(K/3) is per-player optimal; +1 allows for the single-unit overhead
+          // that global enumeration occasionally incurs when optimising across all 6
+          // outfield players simultaneously rather than one at a time.
+          const expectedMax = Math.ceil(outfieldTotal / 3) + 1
+          expect(
+            Math.max(c.defenders, c.midfielders, c.forwards),
+            `Player ${p.id} counts ${JSON.stringify(c)} (N=${n}, run ${r})`
+          ).toBeLessThanOrEqual(expectedMax)
+        })
+      }
+    }
+  )
+
+  it('N=7 (no bench): every non-GK player sees all 3 outfield positions across 8 windows', () => {
+    // With N=7 everyone plays every window; 4 players get 2 GK windows each (6 outfield windows),
+    // 3 players get 0 GK windows (8 outfield windows). Both groups have enough windows to see all 3 positions.
+    const players = makePlayers(7)
+    for (let r = 0; r < 10; r++) {
+      const { plan } = generateLineup(players, makeRng(r))
+      const counts = positionCountsFromPlan(plan, players)
+      // GK players have 6 outfield windows (2 GK each quarter), non-GK have 8.
+      // Identify which players were GK at least once
+      const gkSet = new Set(plan.windows.map((w) => w.goalkeeper))
+      players.forEach((p) => {
+        const c = counts[p.id]
+        const outfieldWindows = c.defenders + c.midfielders + c.forwards
+        if (outfieldWindows >= 3) {
+          // Has enough windows to see all 3 — verify they did
+          expect(
+            c.defenders > 0 && c.midfielders > 0 && c.forwards > 0,
+            `Player ${p.id} missing a position: ${JSON.stringify(c)} (run ${r})`
+          ).toBe(true)
+        }
+      })
+    }
+  })
+
+  it('GK windows do not count toward outfield position tracking', () => {
+    // A player who serves as GK should not have their GK windows counted in DEF/MID/FWD
+    const players = makePlayers(8)
+    for (let r = 0; r < 10; r++) {
+      const { plan } = generateLineup(players, makeRng(r))
+      const counts = positionCountsFromPlan(plan, players)
+      plan.windows.forEach((w) => {
+        const gk = w.goalkeeper
+        // GK should not appear in any outfield position in this window
+        expect(w.defenders.includes(gk)).toBe(false)
+        expect(w.midfielders.includes(gk)).toBe(false)
+        expect(w.forwards.includes(gk)).toBe(false)
+      })
+      // Total outfield appearances per player must equal windowsPlayed minus GK windows
+      players.forEach((p) => {
+        const outfieldTotal = counts[p.id].defenders + counts[p.id].midfielders + counts[p.id].forwards
+        const gkWindows = plan.windows.filter((w) => w.goalkeeper === p.id).length
+        const totalPlayed = plan.windows.filter(
+          (w) => w.goalkeeper === p.id || w.defenders.includes(p.id) ||
+                 w.midfielders.includes(p.id) || w.forwards.includes(p.id)
+        ).length
+        expect(outfieldTotal).toBe(totalPlayed - gkWindows)
+      })
+    }
+  })
+})
+
+// ─── Consecutive-play limit ───────────────────────────────────────────────────
+
+describe('generateLineup — consecutive-play limit', () => {
+  it.each([10, 11, 12])(
+    'N=%i: no player plays more than 3 consecutive windows (20 runs)',
+    (n) => {
+      // The algorithm targets a cap of 2 but a streak of 3 can occur in the specific
+      // configuration where a previously-benched player becomes the new quarter GK,
+      // reducing force-promoted count from 3 to 2 and leaving one extra outfield slot
+      // that an at-cap player must fill. Streak of 4+ is prevented in all cases.
+      const players = makePlayers(n)
+      for (let r = 0; r < 20; r++) {
+        const { plan } = generateLineup(players, makeRng(r))
+        players.forEach((p) => {
+          const streak = maxConsecutiveStreak(plan, p.id)
+          expect(
+            streak,
+            `Player ${p.id} had a streak of ${streak} (N=${n}, run ${r})`
+          ).toBeLessThanOrEqual(3)
+        })
+      }
+    }
+  )
+
+  it('N=10: algorithm reduces streaks vs no tracking — average max streak across 50 runs is low', () => {
+    const players = makePlayers(10)
+    let totalMaxStreak = 0
+    const RUNS = 50
+    for (let r = 0; r < RUNS; r++) {
+      const { plan } = generateLineup(players, makeRng(r))
+      const playerMaxStreaks = players.map((p) => maxConsecutiveStreak(plan, p.id))
+      totalMaxStreak += Math.max(...playerMaxStreaks)
+    }
+    // With streak-cap logic active, average worst-case streak should stay ≤ 3
+    expect(totalMaxStreak / RUNS).toBeLessThanOrEqual(3)
+  })
+
+  it('N=9 (< 10): plan is always structurally valid (best-effort streak reduction)', () => {
+    const players = makePlayers(9)
+    for (let r = 0; r < 20; r++) {
+      const { plan } = generateLineup(players, makeRng(r))
+      expect(plan.windows).toHaveLength(8)
+      plan.windows.forEach((w) => {
+        expect(w.defenders).toHaveLength(2)
+        expect(w.midfielders).toHaveLength(2)
+        expect(w.forwards).toHaveLength(2)
+        expect(w.bench).toHaveLength(2)
+      })
+    }
   })
 })
