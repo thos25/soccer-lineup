@@ -67,8 +67,22 @@ A player benched in window W is guaranteed a field slot in window W+1 (unless th
 ### Fair playing time
 `windowsPlayed` is tracked per player and used to sort candidates at each window, ensuring roughly equal minutes.
 
+### Position rotation
+`positionCounts` tracks how many outfield windows each player has spent at DEF, MID, and FWD (GK windows are excluded). Each window, the algorithm enumerates all 90 ways (C(6,2)×C(4,2)) to split the 6 outfield players into pairs and picks the assignment that minimises the maximum per-player position count, with total position cost as a tiebreaker. This ensures players cycle through all three positions before repeating any, with a soft cap of ~2 per position per game.
+
+### Consecutive-play limit
+`consecutivePlay` tracks how many outfield windows each player has played without a bench window. GK windows are neutral (neither increment nor reset the counter). When N ≥ 10, players at or above a streak of 2 are sorted toward the bench end during candidate selection; best-effort only when N < 10.
+
 ### Separation constraint (⚡ flag)
-Players flagged `separate: true` are kept in different position pairs (DEF, MID, FWD hold 2 players each). The algorithm places flagged players at pair-first-slots (indices 0, 2, 4) so no pair contains two flagged players. Works for up to 3 flagged players; beyond that a `separationViolations` window index is recorded and a warning is shown.
+Players flagged `separate: true` are kept in different position pairs (DEF, MID, FWD hold 2 players each). The 90-combination enumeration runs two passes: the first finds the globally best rotation assignment; the second finds the best rotation assignment with zero separation violations. The non-violating assignment is always preferred when one exists. Only when every combination has a violation (geometrically unavoidable, e.g. k > 3 flagged players outfield) does the algorithm fall back to the global best and record the window index in `separationViolations`.
+
+### Constraint priority order (highest → lowest)
+1. GK lock per quarter
+2. Force-promotion (never bench twice in a row)
+3. Equal playing time (`windowsPlayed` sort)
+4. Position rotation (minimise max position count)
+5. Consecutive-play limit (deprioritise at-cap players when N ≥ 10)
+6. Separation constraint (⚡ flag, best-effort)
 
 ### Swapping
 Tapping a chip opens `SwapPicker`. Swapping the GK at a quarter-start (even) window cascades the same swap to the mid-quarter window so the GK lock is preserved.
@@ -107,6 +121,7 @@ Tapping a chip opens `SwapPicker`. Swapping the GK at a quarter-start (even) win
 - **GK at mid-quarter (odd) window is not swappable** from the UI — the chip is disabled (lock icon shown).
 - **Firebase writes are best-effort** — offline coaches still get full local functionality.
 - **Print layout** is driven by CSS (`no-print`, `lineup-print-grid` classes in `index.css`). The nav and swap UI are hidden in print.
+- **Position stats table** — `LineupPlan` computes DEF/MID/FWD/GK/BNC counts from `plan.windows` and renders a table to the right of the quarter blocks (sticky on desktop, stacked on mobile). Only present players (those in `plan.presentPlayerIds`) appear in the table.
 
 ---
 
@@ -144,9 +159,11 @@ Run with `npm test`. Tests pass a seeded `rng` function so results are determini
 
 When modifying `generateLineup.js`, update or add tests to cover:
 - GK uniqueness across quarters
-- No consecutive bench
-- Separation constraint (≤3 and >3 flagged players)
+- No consecutive bench (force-promotion)
 - Equal playing time distribution
+- Position rotation: no player exceeds `ceil(outfieldWindows/3) + 1` in any single position
+- Consecutive-play limit: no outfield streak > 3 for N ≥ 10 (best-effort for N < 10); GK windows are neutral
+- Separation constraint: zero violations for k ≤ 3 flagged players; violations must occur for k = 4 with N = 7
 
 ---
 
