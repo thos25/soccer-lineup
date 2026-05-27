@@ -69,6 +69,7 @@ export default function App() {
             players={players}
             onSwap={swapPlayers}
             separationViolations={separationViolations}
+            onRegenerate={generatePlan}
           />
         )}
       </main>

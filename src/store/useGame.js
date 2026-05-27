@@ -10,35 +10,19 @@ function findPosition(win, id) {
   return null
 }
 
-function replaceOne(arr, from, to) {
-  return arr.map((id) => (id === from ? to : id))
-}
-
 function swapInWindow(w, idA, idB) {
-  const posA = findPosition(w, idA)
-  const posB = findPosition(w, idB)
-  if (!posA || !posB) return w
-
-  const win = {
+  if (!findPosition(w, idA) || !findPosition(w, idB)) return w
+  // Atomic single-pass swap: replaces idA↔idB everywhere simultaneously,
+  // which is correct whether the two players are in the same position or different ones.
+  const s = (id) => (id === idA ? idB : id === idB ? idA : id)
+  return {
     ...w,
-    defenders: [...w.defenders],
-    midfielders: [...w.midfielders],
-    forwards: [...w.forwards],
-    bench: [...w.bench],
+    goalkeeper: s(w.goalkeeper),
+    defenders: w.defenders.map(s),
+    midfielders: w.midfielders.map(s),
+    forwards: w.forwards.map(s),
+    bench: w.bench.map(s),
   }
-
-  const setPos = (pos, from, to) => {
-    if (pos === 'goalkeeper') win.goalkeeper = to
-    else if (pos === 'defenders') win.defenders = replaceOne(win.defenders, from, to)
-    else if (pos === 'midfielders') win.midfielders = replaceOne(win.midfielders, from, to)
-    else if (pos === 'forwards') win.forwards = replaceOne(win.forwards, from, to)
-    else if (pos === 'bench') win.bench = replaceOne(win.bench, from, to)
-  }
-
-  setPos(posA, idA, idB)
-  setPos(posB, idB, idA)
-
-  return win
 }
 
 export function useGame(players) {

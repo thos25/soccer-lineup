@@ -200,8 +200,12 @@ describe('generateLineup — separation constraint', () => {
   })
 
   it('k=4 flagged with N=7: violations must occur', () => {
+    // With k=4 and only 3 pairs, any window where all 4 flagged players are
+    // outfield (non-flagged player is GK) is guaranteed to have a violation.
+    // Use a seeded RNG to avoid the degenerate case where all 4 GK slots are
+    // taken by flagged players (leaving only 3 flagged outfield every window).
     const players = makePlayersWithSep(7, [0, 1, 2, 3])
-    const { separationViolations } = generateLineup(players)
+    const { separationViolations } = generateLineup(players, makeRng(0))
     expect(separationViolations.length).toBeGreaterThan(0)
   })
 

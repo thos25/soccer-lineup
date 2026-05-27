@@ -121,7 +121,11 @@ Tapping a chip opens `SwapPicker`. Swapping the GK at a quarter-start (even) win
 - **GK at mid-quarter (odd) window is not swappable** from the UI — the chip is disabled (lock icon shown).
 - **Firebase writes are best-effort** — offline coaches still get full local functionality.
 - **Print layout** is driven by CSS (`no-print`, `lineup-print-grid` classes in `index.css`). The nav and swap UI are hidden in print.
-- **Position stats table** — `LineupPlan` computes DEF/MID/FWD/GK/BNC counts from `plan.windows` and renders a table to the right of the quarter blocks (sticky on desktop, stacked on mobile). Only present players (those in `plan.presentPlayerIds`) appear in the table.
+- **Position stats table** — `LineupPlan` computes DEF/MID/FWD/GK/BNC counts from `plan.windows` and renders a table to the right of the quarter blocks (sticky on desktop, stacked on mobile). Only present players (those in `plan.presentPlayerIds`) appear in the table. Cells highlight red when: DEF/MID/FWD is 0 (never played) or >2 (played too often); BNC is >4.
+- **Bench streak highlighting** — `LineupPlan` pre-computes bench runs across all 8 windows via `buildStreaks`. Every window in a run of ≥2 consecutive bench windows gets an amber chip in `LineupWindow`, including the first window of the run. Tooltip: "benched multiple windows in a row".
+- **Field streak highlighting** — Every window in a run of ≥3 consecutive DEF/MID/FWD windows turns the chip red. GK windows break (reset) the outfield streak and are never highlighted red. Computed alongside bench streaks in `buildStreaks`. Tooltip: "on field 3+ windows in a row".
+- **Regenerate button** — Green "Regenerate" button on the Lineup tab header calls `generatePlan()` directly (no tab switch). Passed as `onRegenerate` prop to `LineupPlan`.
+- **Swap correctness** — `swapInWindow` in `useGame.js` uses a single atomic pass (`id === idA ? idB : id === idB ? idA : id`) so same-position swaps (e.g. swapping two defenders with each other) work correctly without duplicating chips.
 
 ---
 

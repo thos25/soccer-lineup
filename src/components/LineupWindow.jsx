@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import SwapPicker from './SwapPicker.jsx'
 
-export default function LineupWindow({ window: win, players = [], getName, onSwap }) {
+export default function LineupWindow({ window: win, players = [], getName, onSwap, consecutiveBench = new Set(), longFieldStreak = new Set() }) {
   const [swapTarget, setSwapTarget] = useState(null)
 
   const playerMap = Object.fromEntries(players.map((p) => [p.id, p]))
@@ -39,15 +39,26 @@ export default function LineupWindow({ window: win, players = [], getName, onSwa
   const renderChip = (id, position) => {
     const locked = position === 'goalkeeper' && !isQuarterStart
     const isSeparate = playerMap[id]?.separate === true
+    const isConsecBench = position === 'bench' && consecutiveBench.has(id)
+    const isLongField = position !== 'bench' && position !== 'goalkeeper' && longFieldStreak.has(id)
     return (
       <button
         key={id}
         onClick={() => handleChipClick(id, position)}
         disabled={locked}
-        title={locked ? 'Goalie locked for this quarter' : `Swap ${getName(id)}`}
+        title={
+          locked ? 'Goalie locked for this quarter'
+          : isConsecBench ? `${getName(id)} — benched multiple windows in a row`
+          : isLongField ? `${getName(id)} — on field 3+ windows in a row`
+          : `Swap ${getName(id)}`
+        }
         className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border transition-colors ${
           locked
             ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-default'
+            : isConsecBench
+            ? 'bg-amber-100 text-amber-800 border-amber-400 hover:border-amber-500 hover:bg-amber-200 active:bg-amber-300 cursor-pointer'
+            : isLongField
+            ? 'bg-red-100 text-red-800 border-red-400 hover:border-red-500 hover:bg-red-200 active:bg-red-300 cursor-pointer'
             : 'bg-white text-gray-800 border-gray-300 hover:border-green-500 hover:bg-green-50 active:bg-green-100 cursor-pointer'
         }`}
       >
