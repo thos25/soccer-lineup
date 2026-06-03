@@ -29,12 +29,21 @@ export function useGame(players) {
   const [presentIds, setPresentIds] = useState(new Set())
   const [plan, setPlan] = useState(null)
   const [separationViolations, setSeparationViolations] = useState([])
+  const [gkLocks, setGkLocks] = useState({})
 
   // Reconcile: drop IDs that no longer exist in the roster
   const validPresentIds = useMemo(() => {
     const roster = new Set(players.map((p) => p.id))
     return new Set([...presentIds].filter((id) => roster.has(id)))
   }, [presentIds, players])
+
+  const validGkLocks = useMemo(() => {
+    const out = {}
+    for (const [q, pid] of Object.entries(gkLocks)) {
+      if (validPresentIds.has(pid)) out[q] = pid
+    }
+    return out
+  }, [gkLocks, validPresentIds])
 
   const togglePresent = (id) => {
     setPresentIds((prev) => {
@@ -43,12 +52,37 @@ export function useGame(players) {
       else next.add(id)
       return next
     })
+    // Separate updater — pure, batched with the above in React 19.
+    // Prunes any GK lock referencing this player (no-op if player wasn't locked).
+    setGkLocks((prevLocks) => {
+      if (!Object.values(prevLocks).includes(id)) return prevLocks
+      const next = { ...prevLocks }
+      for (const q of Object.keys(next)) {
+        if (next[q] === id) delete next[q]
+      }
+      return next
+    })
+  }
+
+  const setGkLock = (quarter, playerId) => {
+    setGkLocks((prev) => {
+      const next = { ...prev }
+      if (playerId === null) {
+        delete next[quarter]
+        return next
+      }
+      for (const q of Object.keys(next)) {
+        if (next[q] === playerId && Number(q) !== quarter) delete next[q]
+      }
+      next[quarter] = playerId
+      return next
+    })
   }
 
   const generatePlan = () => {
     const presentPlayers = players.filter((p) => validPresentIds.has(p.id))
     if (presentPlayers.length < 7) return
-    const { plan, separationViolations } = generateLineup(presentPlayers)
+    const { plan, separationViolations } = generateLineup(presentPlayers, Math.random, validGkLocks)
     setPlan(plan)
     setSeparationViolations(separationViolations)
   }
@@ -96,5 +130,7 @@ export function useGame(players) {
     generatePlan,
     swapPlayers,
     clearPlan,
+    gkLocks: validGkLocks,
+    setGkLock,
   }
 }

@@ -18,7 +18,7 @@ export default function App() {
   } = useRoster()
   const {
     presentIds, togglePresent, plan, separationViolations,
-    generatePlan, swapPlayers, clearPlan,
+    generatePlan, swapPlayers, clearPlan, gkLocks, setGkLock,
   } = useGame(players)
   const { teamName, connected, syncing, offline, connect, disconnect } =
     useTeam(players, setPlayers)
@@ -61,6 +61,8 @@ export default function App() {
             onGenerate={handleGenerate}
             hasPlan={!!plan}
             onClearPlan={clearPlan}
+            gkLocks={gkLocks}
+            onSetGkLock={setGkLock}
           />
         )}
         {activeTab === 'lineup' && (

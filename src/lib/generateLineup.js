@@ -2,6 +2,7 @@
  * Generate a full 8-window rotation plan for a 7v7 soccer game.
  *
  * Rules enforced (highest → lowest priority):
+ *  0. Pre-assigned GK locks from `lockedGkByQuarter` (when provided) — highest priority
  *  1. GK locks for the full quarter (same GK at windowIndex w and w+1 for even w)
  *  2. All 4 quarter goalies are distinct when N >= 8
  *  3. No player benched in consecutive windows (force-promotion)
@@ -16,10 +17,14 @@
  *
  * @param {Array<{id: string, name: string, separate?: boolean}>} presentPlayers
  * @param {() => number} rng - random number source (default Math.random; pass seeded fn for tests)
+ * @param {{ [quarterIdx: number | string]: string }} [lockedGkByQuarter] - optional pre-assigned GKs
+ *   keyed by quarterIdx (0–3) → playerId. JS coerces numeric keys to strings on plain objects;
+ *   both `{0: id}` and `{"0": id}` are accepted. Locked players serve as GK at both windows of
+ *   that quarter. Caller must ensure every locked playerId is present in presentPlayers.
  * @returns {{ plan: LineupPlan, separationViolations: number[] }}
  *   separationViolations: windowIndexes where the separation constraint could not be satisfied
  */
-export function generateLineup(presentPlayers, rng = Math.random) {
+export function generateLineup(presentPlayers, rng = Math.random, lockedGkByQuarter = {}) {
   const N = presentPlayers.length
   if (N < 7) throw new Error('Need at least 7 players')
 
@@ -47,8 +52,8 @@ export function generateLineup(presentPlayers, rng = Math.random) {
   const consecutivePlay = {}
   presentPlayers.forEach((p) => { consecutivePlay[p.id] = 0 })
 
-  const goaliesByQuarter = {}
-  const usedAsGk = new Set()
+  const goaliesByQuarter = { ...lockedGkByQuarter }
+  const usedAsGk = new Set(Object.values(lockedGkByQuarter))
 
   const windows = []
   const separationViolations = []
@@ -61,12 +66,14 @@ export function generateLineup(presentPlayers, rng = Math.random) {
     const quarter = quarterIdx + 1
     const half = w % 2 === 0 ? 'start' : 'mid'
 
-    // --- 1. GK selection (unchanged) ---
+    // --- 1. GK selection ---
     if (w % 2 === 0) {
-      const candidates = shuffle(presentPlayers.filter((p) => !usedAsGk.has(p.id)))
-      candidates.sort((a, b) => windowsPlayed[a.id] - windowsPlayed[b.id])
-      goaliesByQuarter[quarterIdx] = candidates[0].id
-      usedAsGk.add(candidates[0].id)
+      if (goaliesByQuarter[quarterIdx] === undefined) {
+        const candidates = shuffle(presentPlayers.filter((p) => !usedAsGk.has(p.id)))
+        candidates.sort((a, b) => windowsPlayed[a.id] - windowsPlayed[b.id])
+        goaliesByQuarter[quarterIdx] = candidates[0].id
+        usedAsGk.add(candidates[0].id)
+      }
     }
 
     const goalie = goaliesByQuarter[quarterIdx]

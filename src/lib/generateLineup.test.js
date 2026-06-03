@@ -353,3 +353,72 @@ describe('generateLineup — consecutive-play limit', () => {
     }
   })
 })
+
+// ─── GK pre-assignment locks ──────────────────────────────────────────────────
+
+describe('generateLineup — GK pre-assignment locks', () => {
+  // 5a. Locked player must appear as GK at BOTH windows of the locked quarter,
+  //     across seeds 0–4 and N values 7, 8, 10.
+  it.each([
+    { N: 7, locks: { 0: 'p1' } },
+    { N: 7, locks: { 3: 'p6' } },
+    { N: 8, locks: { 1: 'p4' } },
+    { N: 8, locks: { 0: 'p1', 2: 'p5' } },
+    { N: 10, locks: { 0: 'p1', 1: 'p2', 2: 'p3', 3: 'p4' } },
+    { N: 8,  locks: { 0: 'p1', 1: 'p2', 2: 'p3', 3: 'p4' } },
+    { N: 7,  locks: { 0: 'p1', 1: 'p2', 2: 'p3', 3: 'p4' } },
+  ])('N=$N locks=$locks: locked player IS the GK at both windows of their quarter', ({ N, locks }) => {
+    const players = makePlayers(N)
+    for (let r = 0; r < 5; r++) {
+      const { plan } = generateLineup(players, makeRng(r), locks)
+      for (const [q, pid] of Object.entries(locks)) {
+        const w = 2 * Number(q)
+        expect(plan.windows[w].goalkeeper, `seed=${r} Q=${q} W=${w}`).toBe(pid)
+        expect(plan.windows[w + 1].goalkeeper, `seed=${r} Q=${q} W=${w + 1}`).toBe(pid)
+      }
+    }
+  })
+
+  // 5b. With partial locks and N>=8, the remaining auto-assigned quarters
+  //     still produce 4 distinct GKs overall.
+  it.each([8, 9, 10, 12])('N=%i with one lock: all 4 quarter GKs remain distinct', (n) => {
+    const players = makePlayers(n)
+    const locks = { 0: 'p1' }
+    for (let r = 0; r < 5; r++) {
+      const { plan } = generateLineup(players, makeRng(r), locks)
+      const goalies = [0, 2, 4, 6].map((i) => plan.windows[i].goalkeeper)
+      expect(new Set(goalies).size, `run ${r}`).toBe(4)
+    }
+  })
+
+  // 5c. Lock precedence over force-promotion: locked GK never appears in
+  //     outfield or bench at their locked quarter's windows.
+  it('locked GK does not appear in any outfield/bench role at their locked quarter', () => {
+    const players = makePlayers(7)
+    const locks = { 0: 'p1', 1: 'p2', 2: 'p3', 3: 'p4' }
+    for (let r = 0; r < 5; r++) {
+      const { plan } = generateLineup(players, makeRng(r), locks)
+      for (const [q, pid] of Object.entries(locks)) {
+        const w0 = 2 * Number(q)
+        for (const w of [w0, w0 + 1]) {
+          const win = plan.windows[w]
+          expect(win.defenders, `seed=${r} W=${w}`).not.toContain(pid)
+          expect(win.midfielders, `seed=${r} W=${w}`).not.toContain(pid)
+          expect(win.forwards, `seed=${r} W=${w}`).not.toContain(pid)
+          expect(win.bench, `seed=${r} W=${w}`).not.toContain(pid)
+        }
+      }
+    }
+  })
+
+  // 5d. Empty lockedGkByQuarter produces identical windows to omitting the argument
+  //     (plan.id and generatedAt differ between calls; only windows are compared).
+  it('empty lockedGkByQuarter produces the same plan as no third argument', () => {
+    const players = makePlayers(10)
+    for (let r = 0; r < 5; r++) {
+      const a = generateLineup(players, makeRng(r))
+      const b = generateLineup(players, makeRng(r), {})
+      expect(b.plan.windows).toEqual(a.plan.windows)
+    }
+  })
+})

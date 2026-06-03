@@ -7,6 +7,8 @@ export default function GameSetup({
   onGenerate,
   hasPlan,
   onClearPlan,
+  gkLocks = {},
+  onSetGkLock,
 }) {
   const [showConfirm, setShowConfirm] = useState(false)
   const presentCount = presentIds.size
@@ -60,6 +62,40 @@ export default function GameSetup({
               </button>
             ))}
           </div>
+
+          {canGenerate && (
+            <details className="mb-4 border border-gray-200 rounded-xl">
+              <summary className="px-4 py-3 text-sm font-semibold text-gray-700 cursor-pointer select-none">
+                Pre-assign Goalkeepers (optional)
+              </summary>
+              <div className="px-4 pb-3 space-y-2">
+                {[0, 1, 2, 3].map((q) => {
+                  const lockedId = gkLocks[q] ?? null
+                  const availableForThisQuarter = players.filter((p) =>
+                    presentIds.has(p.id) &&
+                    !Object.entries(gkLocks).some(
+                      ([otherQ, pid]) => Number(otherQ) !== q && pid === p.id
+                    )
+                  )
+                  return (
+                    <div key={q} className="flex items-center gap-3">
+                      <label className="text-sm font-medium text-gray-600 w-8">Q{q + 1}</label>
+                      <select
+                        value={lockedId ?? ''}
+                        onChange={(e) => onSetGkLock(q, e.target.value || null)}
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white min-h-[44px]"
+                      >
+                        <option value="">Auto</option>
+                        {availableForThisQuarter.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                })}
+              </div>
+            </details>
+          )}
 
           <button
             onClick={handleGenerateClick}
